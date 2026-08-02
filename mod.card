@@ -1,0 +1,25 @@
+-- Sharing metadata for the manager detail pane.
+return {
+  summary = "Party-wide EXP from the OPTIONS menu: pick Gen 1 Exp. All style or Gen 5+ Exp. Share style, and get one shared-exp line instead of a message per Pokemon.",
+  author = "shanemcgovern",
+  tags = { "gameplay", "exp", "qol" },
+  differences = {
+    changed = {
+      "EXP SHARE sits in the OPTIONS menu: OFF / GEN 1 / GEN 5+ (cycles with LEFT/RIGHT)",
+      "GEN 1: the fighters split half the exp; the whole party splits the other half, exactly like holding the EXP. All item (division bug included)",
+      "GEN 5+: the fighters keep the full exp split between them; every alive bench mon gets half a fighter's share",
+      "Shared exp prints ONE \"Exp is shared amongst the party\" line instead of an individual gain message per Pokemon",
+    },
+    added = {
+      "Level-ups, stat boxes and move learning still show for every mon that gained exp",
+    },
+    known = {
+      "OFF keeps the vanilla behavior, including the vanilla EXP. All item's per-mon messages",
+      "Bench mons get half the stat experience too (the engine splits stat exp with the same divisor)",
+    },
+  },
+  credits = {
+    { who = "Pokemon Gen 1 Recompilation Project", for_ = "the engine and its mod seams" },
+  },
+  compat = { engine = ">=0.0.0 <2.0.0", modApi = 2 },
+}
