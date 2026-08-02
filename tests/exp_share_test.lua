@@ -87,7 +87,7 @@ do
   T.eq(log[1].announce, true, "gen1: the fighter's own gain is announced")
   -- the share line lands before the silent whole-party pass
   T.eq(log[2].kind, "say", "gen1: the share line is queued second")
-  T.eq(log[2].text, "Exp is shared\namongst the party!",
+  T.eq(log[2].text, "EXP is shared\namongst the party!",
     "gen1: the single shared-exp line")
   -- whole-party pass: the halved-and-fighter-divided base re-divided by
   -- the party count, silent (the share line covers it)
@@ -173,7 +173,7 @@ do
   T.eq(log[1].announce, true, "gen5: the fighter's own gain is announced")
   -- the share line lands before the bench level-ups
   T.eq(log[2].kind, "say", "gen5: the share line follows the fighter")
-  T.eq(log[2].text, "Exp is shared\namongst the party!",
+  T.eq(log[2].text, "EXP is shared\namongst the party!",
     "gen5: the single shared-exp line")
   T.eq(log[3].mon, monB, "gen5: the bench mon is paid after the share line")
   T.eq(log[3].split, 2, "gen5: bench gets half a fighter's share")

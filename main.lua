@@ -5,12 +5,12 @@
 -- included, engine/battle/experience.asm).  GEN 5+ mirrors the modern
 -- Exp. Share -- the fighters keep the full amount split between them,
 -- and every alive bench mon gets half a fighter's share.
--- Shared recipients get ONE "Exp is shared amongst the party" line
+-- Shared recipients get ONE "EXP is shared amongst the party" line
 -- instead of a per-mon "X gained N EXP. Points!" message.
 
 local ORDER = { "off", "gen1", "gen5" }
 local LABELS = { off = "OFF", gen1 = "GEN 1", gen5 = "GEN 5+" }
-local SHARE_TEXT = "Exp is shared\namongst the party!"
+local SHARE_TEXT = "EXP is shared\namongst the party!"
 
 local api = {}
 
