@@ -1,13 +1,15 @@
 -- Sharing metadata for the manager detail pane.
 return {
-  summary = "Party-wide EXP from the OPTIONS menu: pick Gen 1 Exp. All style or Gen 5+ Exp. Share style, and get one shared-exp line instead of a message per Pokemon.",
+  summary = "Party-wide EXP from the OPTIONS menu: Gen 1 Exp. All style, Gen 5+ Exp. Share style, or BALANCED / AVERAGE presets that keep the bench from out-leveling the party — one shared-exp line instead of a message per Pokemon.",
   author = "shanemcgovern",
   tags = { "gameplay", "exp", "qol" },
   differences = {
     changed = {
-      "EXP SHARE sits in the OPTIONS menu: OFF / GEN 1 / GEN 5+ (cycles with LEFT/RIGHT)",
+      "EXP SHARE sits in the OPTIONS menu: OFF / GEN 1 / GEN 5+ / BALANCED / AVERAGE (cycles with LEFT/RIGHT)",
       "GEN 1: the fighters split half the exp; the whole party splits the other half, exactly like holding the EXP. All item (division bug included)",
       "GEN 5+: the fighters keep the full exp split between them; every alive bench mon gets half a fighter's share",
+      "BALANCED: the GEN 5+ split, but a bench mon only gains exp while below the active fighter's level",
+      "AVERAGE: the same gate measured against the party's average level (whole party, floored) instead of the active fighter",
       "Shared exp prints ONE \"EXP is shared amongst the party\" line instead of an individual gain message per Pokemon",
     },
     added = {

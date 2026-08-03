@@ -1,13 +1,14 @@
 # Exp Share
 
-Party-wide experience from the OPTIONS menu, in Gen 1 Exp. All style or Gen 5+ Exp. Share style — with one "EXP is shared amongst the party" line instead of a gain message per Pokemon.
+Party-wide experience from the OPTIONS menu, in Gen 1 Exp. All style, Gen 5+ Exp. Share style, or BALANCED / AVERAGE presets — with one "EXP is shared amongst the party" line instead of a gain message per Pokemon.
 
 ## How to try it
 
 1. Install the mod and enable it in the mod manager (MODS row in OPTIONS).
-2. Open OPTIONS and cycle the new EXP SHARE row with LEFT/RIGHT: OFF / GEN 1 / GEN 5+.
+2. Open OPTIONS and cycle the new EXP SHARE row with LEFT/RIGHT: OFF / GEN 1 / GEN 5+ / BALANCED / AVERAGE.
 3. Fight. In GEN 1, the fighters split half the exp and the whole party splits the other half (the vanilla Exp. All split, including its division bug). In GEN 5+, the fighters keep the full exp and every alive bench mon gets half a fighter's share.
-4. Shared recipients get one "EXP is shared amongst the party" line; the fighters still get their own "X gained N EXP. Points!" lines, and everyone's level-ups, stat boxes and move learning still show.
+4. BALANCED is the GEN 5+ split with a level gate: a bench mon only gains exp while it is below the active fighter's level, so the bench trails the party instead of out-leveling the mons that actually fight. AVERAGE is the same gate measured against the party's average level (whole party, floored) instead of the active fighter. At- or over-threshold bench mons wait for the party to level past them.
+5. Shared recipients get one "EXP is shared amongst the party" line; the fighters still get their own "X gained N EXP. Points!" lines, and everyone's level-ups, stat boxes and move learning still show.
 
 ## Notes
 
@@ -19,7 +20,7 @@ Party-wide experience from the OPTIONS menu, in Gen 1 Exp. All style or Gen 5+ E
 
 - `manifest.json` — identity, version range, load order
 - `main.lua` — the entry chunk; the OPTIONS row and the exp split hook
-- `tests/exp_share_test.lua` — headless coverage of the row and both splits
+- `tests/exp_share_test.lua` — headless coverage of the row and the splits
 
 ## Loop
 

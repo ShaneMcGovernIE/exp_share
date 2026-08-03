@@ -46,15 +46,24 @@ T.eq(row.value(game), "GEN 1", "value follows the save")
 T.eq(row.step(game, 1), true, "step again")
 T.eq(game.save.options.expShare, "gen5", "GEN 1 cycles to GEN 5+")
 T.eq(row.value(game), "GEN 5+", "GEN 5+ label")
+T.eq(row.step(game, 1), true, "step again")
+T.eq(game.save.options.expShare, "balanced", "GEN 5+ cycles to BALANCED")
+T.eq(row.value(game), "BALANCED", "BALANCED label")
+T.eq(row.step(game, 1), true, "step again")
+T.eq(game.save.options.expShare, "average", "BALANCED cycles to AVERAGE")
+T.eq(row.value(game), "AVERAGE", "AVERAGE label")
 T.eq(row.step(game, -1), true, "stepping left works")
-T.eq(game.save.options.expShare, "gen1", "GEN 5+ left-cycles to GEN 1")
+T.eq(game.save.options.expShare, "balanced", "AVERAGE left-cycles to BALANCED")
 T.eq(row.step(game, 1), true, "step again")
+T.eq(game.save.options.expShare, "average", "BALANCED right-cycles to AVERAGE")
 T.eq(row.step(game, 1), true, "step again")
-T.eq(game.save.options.expShare, "off", "GEN 5+ cycles back to OFF")
-T.eq(written, 5, "each step persists via writeOptions")
+T.eq(game.save.options.expShare, "off", "AVERAGE cycles back to OFF")
+T.eq(written, 7, "each step persists via writeOptions")
 
 game.save.options.expShare = "bogus"
 T.eq(ex.modeOf(game), "off", "a garbage value normalizes to OFF")
+game.save.options.expShare = "average"
+T.eq(ex.modeOf(game), "average", "AVERAGE is a recognized mode")
 T.eq(ex.cycle({}), nil, "no save -> nil (launcher is untouched)")
 T.eq(ex.cycle({ save = {} }), nil, "no options table -> nil")
 
@@ -252,6 +261,244 @@ do
   T.eq(#log, 1, "gen5: no share line for a solo party")
 end
 
+-- ------------------------------------------------ BALANCED split
+
+do
+  -- bench below the active fighter's level: half share + share line
+  local log = {}
+  local monA, monB = { hp = 10, level = 12 }, { hp = 10, level = 10 }
+  local battle = {
+    game = { save = { options = { expShare = "balanced" },
+                      party = { monA, monB } } },
+    player = { mon = { level = 12 } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardBalanced(ctx)
+  T.eq(log[1].mon, monA, "balanced: the fighter keeps the full amount")
+  T.eq(log[1].split, 1, "balanced: fighter split = participants(1)")
+  T.eq(log[2].kind, "say", "balanced: the share line follows the fighter")
+  T.eq(log[3].mon, monB, "balanced: the under-leveled bench mon is paid")
+  T.eq(log[3].split, 2, "balanced: bench gets half a fighter's share")
+  T.eq(log[3].announce, nil, "balanced: bench gains are not announced per mon")
+  T.eq(#log, 3, "balanced: fighter share + share line + one bench share")
+end
+
+do
+  -- bench AT the active fighter's level: no exp, no share line
+  local log = {}
+  local monA, monB = { hp = 10, level = 12 }, { hp = 10, level = 12 }
+  local battle = {
+    game = { save = { options = { expShare = "balanced" },
+                      party = { monA, monB } } },
+    player = { mon = { level = 12 } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardBalanced(ctx)
+  T.eq(#log, 1, "balanced: a bench mon at the fighter's level gets nothing")
+end
+
+do
+  -- bench ABOVE the active fighter's level: no exp, no share line
+  local log = {}
+  local monA, monB = { hp = 10, level = 10 }, { hp = 10, level = 14 }
+  local battle = {
+    game = { save = { options = { expShare = "balanced" },
+                      party = { monA, monB } } },
+    player = { mon = { level = 10 } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardBalanced(ctx)
+  T.eq(#log, 1, "balanced: an over-leveled bench mon gets nothing")
+end
+
+do
+  -- mixed bench: only the under-leveled mon is paid, share line still
+  -- shows once
+  local log = {}
+  local monA = { hp = 10, level = 12 }
+  local under, equal = { hp = 10, level = 9 }, { hp = 10, level = 12 }
+  local battle = {
+    game = { save = { options = { expShare = "balanced" },
+                      party = { monA, under, equal } } },
+    player = { mon = { level = 12 } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardBalanced(ctx)
+  T.eq(log[1].mon, monA, "balanced: the fighter is paid first")
+  T.eq(log[2].kind, "say", "balanced: one share line")
+  T.eq(log[3].mon, under, "balanced: only the under-leveled bench mon is paid")
+  T.eq(#log, 3, "balanced: the at-level bench mon is skipped")
+end
+
+do
+  -- solo party: vanilla amounts, no gate involvement
+  local log = {}
+  local monA = { hp = 10, level = 7 }
+  local battle = {
+    game = { save = { options = { expShare = "balanced" },
+                      party = { monA } } },
+    player = { mon = { level = 7 } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardBalanced(ctx)
+  T.eq(log[1].split, 1, "balanced: solo mon keeps the full amount")
+  T.eq(#log, 1, "balanced: no share line for a solo party")
+end
+
+-- ------------------------------------------------ AVERAGE split
+
+do
+  -- party {12, 10, 8} averages 10; the bench at 9 is below it and is
+  -- paid, the bench at 10 is at the average and is skipped
+  local log = {}
+  local monA, monB, monC = { hp = 10, level = 12 }, { hp = 10, level = 9 },
+                            { hp = 10, level = 10 }
+  local battle = {
+    game = { save = { options = { expShare = "average" },
+                      party = { monA, monB, monC } } },
+    player = { mon = { level = 12 } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardAverage(ctx)
+  T.eq(log[1].mon, monA, "average: the fighter keeps the full amount")
+  T.eq(log[1].split, 1, "average: fighter split = participants(1)")
+  T.eq(log[2].kind, "say", "average: the share line follows the fighter")
+  T.eq(log[3].mon, monB, "average: the below-average bench mon is paid")
+  T.eq(log[3].split, 2, "average: bench gets half a fighter's share")
+  T.eq(log[3].announce, nil, "average: bench gains are not announced per mon")
+  T.eq(#log, 3, "average: the at-average bench mon is skipped")
+end
+
+do
+  -- flat party {10, 10, 10} averages 10: the bench at 10 gets nothing
+  local log = {}
+  local monA, monB = { hp = 10, level = 10 }, { hp = 10, level = 10 }
+  local battle = {
+    game = { save = { options = { expShare = "average" },
+                      party = { monA, monB } } },
+    player = { mon = { level = 10 } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardAverage(ctx)
+  T.eq(#log, 1, "average: a bench mon at the party average gets nothing")
+end
+
+do
+  -- party {14, 12, 8} averages 11 (floored): the bench at 12 is above
+  -- the average and gets nothing (even though it is below the fighter);
+  -- only the level-8 bench mon is paid
+  local log = {}
+  local monA, monHigh, monLow = { hp = 10, level = 14 }, { hp = 10, level = 12 },
+                                { hp = 10, level = 8 }
+  local battle = {
+    game = { save = { options = { expShare = "average" },
+                      party = { monA, monHigh, monLow } } },
+    player = { mon = { level = 14 } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardAverage(ctx)
+  T.eq(log[1].mon, monA, "average: the fighter is paid first")
+  T.eq(log[2].kind, "say", "average: one share line")
+  T.eq(log[3].mon, monLow, "average: only the below-average bench mon is paid")
+  T.eq(#log, 3, "average: the above-average bench mon is skipped")
+end
+
+do
+  -- solo party: no gate involvement
+  local log = {}
+  local monA = { hp = 10, level = 7 }
+  local battle = {
+    game = { save = { options = { expShare = "average" },
+                      party = { monA } } },
+    player = { mon = { level = 7 } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardAverage(ctx)
+  T.eq(log[1].split, 1, "average: solo mon keeps the full amount")
+  T.eq(#log, 1, "average: no share line for a solo party")
+end
+
 -- ------------------------------------------------ hook wiring
 
 do
@@ -283,6 +530,50 @@ do
   }
   Runtime.call("battle.exp_award", function() sawVanilla = true end, ctx)
   T.eq(sawVanilla, false, "GEN 5+ replaces the vanilla split")
+  T.eq(#calls, 2, "the mod's split ran instead")
+end
+
+do
+  -- BALANCED replaces the vanilla split without calling it
+  local sawVanilla = false
+  local calls = {}
+  local monA, monB = { hp = 10, level = 12 }, { hp = 10, level = 10 }
+  local balancedBattle = {
+    game = { save = { options = { expShare = "balanced" },
+                      party = { monA, monB } } },
+    player = { mon = { level = 12 } },
+    sayNext = function() end,
+  }
+  local ctx = {
+    battle = balancedBattle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split) calls[#calls + 1] = split end,
+  }
+  Runtime.call("battle.exp_award", function() sawVanilla = true end, ctx)
+  T.eq(sawVanilla, false, "BALANCED replaces the vanilla split")
+  T.eq(#calls, 2, "the mod's split ran instead")
+end
+
+do
+  -- AVERAGE replaces the vanilla split without calling it
+  local sawVanilla = false
+  local calls = {}
+  local monA, monB = { hp = 10, level = 12 }, { hp = 10, level = 9 }
+  local averageBattle = {
+    game = { save = { options = { expShare = "average" },
+                      party = { monA, monB } } },
+    player = { mon = { level = 12 } },
+    sayNext = function() end,
+  }
+  local ctx = {
+    battle = averageBattle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split) calls[#calls + 1] = split end,
+  }
+  Runtime.call("battle.exp_award", function() sawVanilla = true end, ctx)
+  T.eq(sawVanilla, false, "AVERAGE replaces the vanilla split")
   T.eq(#calls, 2, "the mod's split ran instead")
 end
 
