@@ -13,6 +13,8 @@
 -- instead of a per-mon "X gained N EXP. Points!" message.
 
 local ORDER = { "off", "gen1", "gen5", "balanced", "average" }
+local ORDER_INDEX = {}
+for i, mode in ipairs(ORDER) do ORDER_INDEX[mode] = i end
 local LABELS = { off = "OFF", gen1 = "GEN 1", gen5 = "GEN 5+",
                  balanced = "BALANCED", average = "AVERAGE" }
 local SHARE_TEXT = "EXP is shared\namongst the party!"
@@ -37,10 +39,9 @@ end
 function api.cycle(game, dir)
   local options = game and game.save and game.save.options
   if not options then return nil end
-  local i = 1
-  for idx, mode in ipairs(ORDER) do
-    if mode == api.modeOf(game) then i = idx break end
-  end
+  -- modeOf normalizes, so the ladder position is a direct lookup; the
+  -- modulo is the same wrap the engine's own ladder rows use
+  local i = ORDER_INDEX[api.modeOf(game)]
   local nextMode = ORDER[((i - 1 + (dir or 1)) % #ORDER) + 1]
   options.expShare = nextMode
   if game.writeOptions then game:writeOptions() end
