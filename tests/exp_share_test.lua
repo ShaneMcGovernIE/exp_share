@@ -499,6 +499,190 @@ do
   T.eq(#log, 1, "average: no share line for a solo party")
 end
 
+-- ------------------------------------------------ SINGLE EXP SHARE row
+
+local function findSlotRow(game)
+  local rows = Runtime.call("ui.options.rows", function(_, r) return r end,
+    game, { { id = "text_speed" } })
+  for _, row in ipairs(rows) do
+    if row.id == "exp_share_single" then return row end
+  end
+  return nil
+end
+
+local slotWritten = 0
+local slotGame = {
+  save = { options = {} },
+  writeOptions = function(self)
+    assert(type(self) == "table" and self.save ~= nil,
+           "writeOptions must be called with a colon")
+    slotWritten = slotWritten + 1
+  end,
+}
+
+local slotRow = findSlotRow(slotGame)
+T.neq(slotRow, nil, "the SINGLE EXP SHARE row joins the options menu")
+T.eq(slotRow.label, "SINGLE EXP SHARE", "slot row label")
+T.eq(slotRow.value(slotGame), "ALL", "slot defaults to ALL")
+for _, want in ipairs({ "1", "2", "3", "4", "5", "6" }) do
+  T.eq(slotRow.step(slotGame, 1), true, "slot step right (" .. want .. ")")
+  T.eq(slotGame.save.options.expShareSingle, want, "slot value follows the save")
+  T.eq(slotRow.value(slotGame), want, "slot label shows the slot")
+end
+T.eq(slotRow.step(slotGame, 1), true, "slot step right wraps")
+T.eq(slotGame.save.options.expShareSingle, "all", "slot 6 wraps back to ALL")
+T.eq(slotRow.value(slotGame), "ALL", "slot ALL label after the wrap")
+T.eq(slotRow.step(slotGame, -1), true, "slot step left works")
+T.eq(slotGame.save.options.expShareSingle, "6", "slot ALL left-cycles to 6")
+T.eq(slotWritten, 8, "each slot step persists via writeOptions")
+
+slotGame.save.options.expShareSingle = "all"
+T.eq(ex.slotOf(slotGame), nil, "ALL means the whole party")
+slotGame.save.options.expShareSingle = "3"
+T.eq(ex.slotOf(slotGame), 3, "slot 3 is recognized")
+slotGame.save.options.expShareSingle = "0"
+T.eq(ex.slotOf(slotGame), nil, "slot 0 is out of range")
+slotGame.save.options.expShareSingle = "7"
+T.eq(ex.slotOf(slotGame), nil, "slot 7 is out of range")
+slotGame.save.options.expShareSingle = "bogus"
+T.eq(ex.slotOf(slotGame), nil, "a garbage slot value means ALL")
+T.eq(ex.cycleSlot({}), nil, "no save -> nil (launcher is untouched)")
+T.eq(ex.cycleSlot({ save = {} }), nil, "no options table -> nil")
+
+-- ------------------------------------------------ SINGLE-slot splits
+
+do
+  -- GEN 5+ with slot 3: only the designated bench mon is paid
+  local log = {}
+  local monA, monB, monC = { hp = 10 }, { hp = 10 }, { hp = 10 }
+  local battle = {
+    game = { save = { options = { expShare = "gen5", expShareSingle = "3" },
+                      party = { monA, monB, monC } } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardGen5(ctx)
+  T.eq(log[1].mon, monA, "single: the fighter keeps the full amount")
+  T.eq(log[1].split, 1, "single: fighter split = participants(1)")
+  T.eq(log[1].announce, true, "single: the fighter's own gain is announced")
+  T.eq(log[2].kind, "say", "single: the share line follows the fighter")
+  T.eq(log[3].mon, monC, "single: only the designated slot mon is paid")
+  T.eq(log[3].split, 2, "single: the designated mon gets half a fighter's share")
+  T.eq(log[3].announce, nil, "single: the designated gain is not announced")
+  T.eq(#log, 3, "single: the other bench mon is skipped")
+end
+
+do
+  -- GEN 5+ slot pointing at the fighter: nothing is shared, no line
+  local log = {}
+  local monA, monB = { hp = 10 }, { hp = 10 }
+  local battle = {
+    game = { save = { options = { expShare = "gen5", expShareSingle = "1" },
+                      party = { monA, monB } } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardGen5(ctx)
+  T.eq(log[1].mon, monA, "single-to-fighter: the fighter keeps the full amount")
+  T.eq(#log, 1, "single-to-fighter: no bench, no share line")
+end
+
+do
+  -- GEN 5+ slot beyond the party size: the empty slot shares to nobody
+  local log = {}
+  local monA, monB = { hp = 10 }, { hp = 10 }
+  local battle = {
+    game = { save = { options = { expShare = "gen5", expShareSingle = "6" },
+                      party = { monA, monB } } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardGen5(ctx)
+  T.eq(log[1].mon, monA, "empty-slot: the fighter keeps the full amount")
+  T.eq(#log, 1, "empty-slot: an empty designated slot shares to nobody")
+end
+
+do
+  -- GEN 1 with slot 2: the party pass reaches only the designated mon
+  local log = {}
+  local monA, monB, monC = { hp = 10 }, { hp = 10 }, { hp = 10 }
+  local battle = {
+    game = { save = { options = { expShare = "gen1", expShareSingle = "2" },
+                      party = { monA, monB, monC } } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardGen1(ctx)
+  T.eq(log[1].mon, monA, "gen1 single: the fighter gets its announced half")
+  T.eq(log[1].split, 2, "gen1 single: fighter split = participants(1) x 2")
+  T.eq(log[1].announce, true, "gen1 single: the fighter's gain is announced")
+  T.eq(log[2].kind, "say", "gen1 single: the share line follows the fighter")
+  T.eq(log[2].text, "EXP is shared\namongst the party!",
+    "gen1 single: the single shared-exp line")
+  T.eq(log[3].mon, monB, "gen1 single: only the designated slot mon is in the party pass")
+  T.eq(log[3].split, 6, "gen1 single: party pass = 1 x party(3) x 2")
+  T.eq(log[3].announce, nil, "gen1 single: the party-pass gain is not announced")
+  T.eq(#log, 3, "gen1 single: the other party mons are skipped")
+end
+
+do
+  -- GEN 1 slot pointing at the fighter: the party pass stays with the
+  -- fighter (no share line -- nothing is shared to anyone else)
+  local log = {}
+  local monA, monB = { hp = 10 }, { hp = 10 }
+  local battle = {
+    game = { save = { options = { expShare = "gen1", expShareSingle = "1" },
+                      party = { monA, monB } } },
+    sayNext = function(_, text) log[#log + 1] = { kind = "say", text = text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split, announce)
+      log[#log + 1] = { kind = "share", mon = mon, split = split,
+                        announce = announce }
+    end,
+  }
+  ex.awardGen1(ctx)
+  T.eq(log[1].mon, monA, "gen1 single-to-fighter: the announced half")
+  T.eq(log[2].mon, monA, "gen1 single-to-fighter: the party pass stays with the fighter")
+  T.eq(log[2].split, 4, "gen1 single-to-fighter: party pass = 1 x party(2) x 2")
+  T.eq(#log, 2, "gen1 single-to-fighter: no share line for a fighter-only pass")
+end
+
 -- ------------------------------------------------ hook wiring
 
 do
@@ -575,6 +759,29 @@ do
   Runtime.call("battle.exp_award", function() sawVanilla = true end, ctx)
   T.eq(sawVanilla, false, "AVERAGE replaces the vanilla split")
   T.eq(#calls, 2, "the mod's split ran instead")
+end
+
+do
+  -- SINGLE EXP SHARE filters the bench through the real hook
+  local sawVanilla = false
+  local calls = {}
+  local monA, monB, monC = { hp = 10 }, { hp = 10 }, { hp = 10 }
+  local slotBattle = {
+    game = { save = { options = { expShare = "gen5", expShareSingle = "3" },
+                      party = { monA, monB, monC } } },
+    sayNext = function() end,
+  }
+  local ctx = {
+    battle = slotBattle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split) calls[#calls + 1] = mon end,
+  }
+  Runtime.call("battle.exp_award", function() sawVanilla = true end, ctx)
+  T.eq(sawVanilla, false, "single-slot replaces the vanilla split")
+  T.eq(#calls, 2, "single through the hook: fighter + one designated mon")
+  T.eq(calls[1], monA, "single through the hook: the fighter is paid first")
+  T.eq(calls[2], monC, "single through the hook: only the slot-3 mon is paid")
 end
 
 -- ------------------------------------------------ real battle integration
