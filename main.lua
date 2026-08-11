@@ -217,7 +217,10 @@ return function(mod)
 
   -- battle.exp_award: OFF defers to the vanilla participant/EXP.ALL
   -- split; GEN 1, GEN 5+, BALANCED and AVERAGE replace it.  ctx is the
-  -- engine's { battle, participants, alive, applyShare }.
+  -- engine's { battle, participants, alive, applyShare }.  Priority 90 runs
+  -- this wrap before Crystal 251's priority-80 wrap so exp_share wins when
+  -- active; in OFF mode we defer through nextFn, which falls through to
+  -- Crystal's wrap so Crystal still owns EXP when exp_share is disabled.
   mod.hooks:wrap("battle.exp_award", function(nextFn, ctx)
     local mode = api.modeOf(ctx.battle and ctx.battle.game)
     if mode == "gen1" then return api.awardGen1(ctx) end
@@ -225,7 +228,7 @@ return function(mod)
     if mode == "balanced" then return api.awardBalanced(ctx) end
     if mode == "average" then return api.awardAverage(ctx) end
     return nextFn(ctx)
-  end)
+  end, 90)
 
   mod.exports.modeOf = api.modeOf
   mod.exports.cycle = api.cycle

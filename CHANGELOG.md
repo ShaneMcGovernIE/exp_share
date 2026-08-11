@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-08-11
+
+### Fixed
+
+- EXP SHARE now works alongside overhaul mods that take over the battle
+  experience award (e.g. the Crystal 251 mod). Previously such a mod wrapped
+  the same experience hook at a higher priority and ran first, silently
+  swallowing the award so the EXP SHARE modes never applied. The hook now
+  runs at priority 90, before those wraps, so a configured mode (GEN 1 /
+  GEN 5+ / BALANCED / AVERAGE) is honoured. With OFF selected the mod defers
+  as before, so the other mod's own experience system still applies.
+
 ## [0.1.5] - 2026-08-05
 
 ### Added
