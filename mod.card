@@ -1,6 +1,6 @@
 -- Sharing metadata for the manager detail pane.
 return {
-  summary = "Party-wide EXP from the OPTIONS menu: Gen 1 Exp. All style, Gen 5+ Exp. Share style, or BALANCED / AVERAGE presets that keep the bench from out-leveling the party — one shared-exp line instead of a message per Pokemon.",
+  summary = "Party-wide EXP from the OPTIONS menu: Gen 1 Exp. All style, Gen 5+ Exp. Share style, or BALANCED / AVERAGE presets that keep the bench from out-leveling the party — one shared-exp line instead of a message per Pokemon. Works on Red/Blue/Yellow and Gold.",
   author = "shanemcgovern",
   tags = { "gameplay", "exp", "qol" },
   differences = {

@@ -31,15 +31,52 @@ local SLOT_LABELS = { all = "ALL", ["1"] = "1", ["2"] = "2", ["3"] = "3",
 
 local api = {}
 
--- normalized mode: nil / garbage -> "off"
-function api.modeOf(game)
-  local options = game and game.save and game.save.options
+-- the save behind a battle ctx on either generation: Gen 1's BattleState
+-- carries the live game (battle.game.save); Gen 2's Battle carries the save
+-- itself (battle.save) with battle.party aliasing save.party.
+local function saveOf(battle)
+  if not battle then return nil end
+  return battle.save or (battle.game and battle.game.save)
+end
+
+local function partyOf(battle)
+  local save = saveOf(battle)
+  return (battle and battle.party) or (save and save.party) or {}
+end
+
+local function optionsOf(battle)
+  local save = saveOf(battle)
+  return save and save.options
+end
+
+local function modeFromOptions(options)
   local mode = options and options.expShare
   if mode == "gen1" or mode == "gen5" or mode == "balanced"
       or mode == "average" then
     return mode
   end
   return "off"
+end
+
+local function slotFromOptions(options)
+  local slot = tonumber(options and options.expShareSingle)
+  if slot and slot >= 1 and slot <= 6 then return slot end
+  return nil
+end
+
+-- the share line: Gen 1's BattleState:sayNext, Gen 2's Battle:emit
+local function sayShare(battle, text)
+  if not battle then return end
+  if battle.sayNext then
+    battle:sayNext(text)
+  else
+    battle:emit({ kind = "message", text = text })
+  end
+end
+
+-- normalized mode: nil / garbage -> "off"
+function api.modeOf(game)
+  return modeFromOptions(game and game.save and game.save.options)
 end
 
 -- the row's step body: LEFT/RIGHT cycle OFF -> GEN 1 -> GEN 5+ ->
@@ -54,7 +91,11 @@ function api.cycle(game, dir)
   local i = ORDER_INDEX[api.modeOf(game)]
   local nextMode = ORDER[((i - 1 + (dir or 1)) % #ORDER) + 1]
   options.expShare = nextMode
-  if game.writeOptions then game:writeOptions() end
+  if game.writeOptions then
+    game:writeOptions()
+  elseif game.persistOptions then
+    game:persistOptions()
+  end
   return nextMode
 end
 
@@ -65,10 +106,7 @@ end
 -- SINGLE EXP SHARE: nil (missing / "all" / garbage) means the shared exp
 -- reaches the whole party; a number 1-6 scopes it to that party slot.
 function api.slotOf(game)
-  local options = game and game.save and game.save.options
-  local slot = tonumber(options and options.expShareSingle)
-  if slot and slot >= 1 and slot <= 6 then return slot end
-  return nil
+  return slotFromOptions(game and game.save and game.save.options)
 end
 
 -- the row's step body: LEFT/RIGHT cycle ALL -> 1 -> 2 -> ... -> 6 -> ALL.
@@ -79,7 +117,11 @@ function api.cycleSlot(game, dir)
   local i = SLOT_INDEX[options.expShareSingle] or 1
   local nextSlot = SLOT_ORDER[((i - 1 + (dir or 1)) % #SLOT_ORDER) + 1]
   options.expShareSingle = nextSlot
-  if game.writeOptions then game:writeOptions() end
+  if game.writeOptions then
+    game:writeOptions()
+  elseif game.persistOptions then
+    game:persistOptions()
+  end
   return nextSlot
 end
 
@@ -99,8 +141,8 @@ end
 -- level-up messages queue.
 function api.awardGen1(ctx)
   local battle = ctx.battle
-  local party = battle.game.save.party
-  local slot = api.slotOf(battle.game)
+  local party = partyOf(battle)
+  local slot = slotFromOptions(optionsOf(battle))
   local single = slot and party[slot]
   local p = math.max(1, ctx.participants)
   local fought = {}
@@ -120,7 +162,7 @@ function api.awardGen1(ctx)
   for _, mon in ipairs(recipients) do
     if not fought[mon] then line = true break end
   end
-  if line then battle:sayNext(SHARE_TEXT) end
+  if line then sayShare(battle, SHARE_TEXT) end
   for _, mon in ipairs(recipients) do
     ctx.applyShare(mon, p * #party * 2, nil)
   end
@@ -133,8 +175,8 @@ end
 -- before the bench level-ups.
 local function awardModern(ctx, gate)
   local battle = ctx.battle
-  local party = battle.game.save.party
-  local slot = api.slotOf(battle.game)
+  local party = partyOf(battle)
+  local slot = slotFromOptions(optionsOf(battle))
   local single = slot and party[slot]
   local p = math.max(1, ctx.participants)
   local fought = {}
@@ -149,7 +191,7 @@ local function awardModern(ctx, gate)
   for _, mon in ipairs(ctx.alive) do
     ctx.applyShare(mon, p, true)
   end
-  if #bench > 0 then battle:sayNext(SHARE_TEXT) end
+  if #bench > 0 then sayShare(battle, SHARE_TEXT) end
   for _, mon in ipairs(bench) do
     ctx.applyShare(mon, p * 2, nil)
   end
@@ -167,7 +209,9 @@ end
 -- the mons that actually fight.
 function api.awardBalanced(ctx)
   local battle = ctx.battle
-  local active = battle.player and battle.player.mon
+  -- Gen 1 wraps the party mon in a battler (battle.player.mon); Gen 2's
+  -- battle.player IS the party mon.  Either way the mon carries `.level`.
+  local active = battle.player and (battle.player.mon or battle.player)
   local capLevel = active and active.level or 100
   return awardModern(ctx, function(mon)
     return mon.level < capLevel
@@ -180,7 +224,7 @@ end
 -- middle instead of the lead fighter.
 function api.awardAverage(ctx)
   local battle = ctx.battle
-  local party = battle.game.save.party
+  local party = partyOf(battle)
   local total = 0
   for _, mon in ipairs(party) do
     total = total + (mon.level or 1)
@@ -222,7 +266,7 @@ return function(mod)
   -- active; in OFF mode we defer through nextFn, which falls through to
   -- Crystal's wrap so Crystal still owns EXP when exp_share is disabled.
   mod.hooks:wrap("battle.exp_award", function(nextFn, ctx)
-    local mode = api.modeOf(ctx.battle and ctx.battle.game)
+    local mode = modeFromOptions(optionsOf(ctx.battle))
     if mode == "gen1" then return api.awardGen1(ctx) end
     if mode == "gen5" then return api.awardGen5(ctx) end
     if mode == "balanced" then return api.awardBalanced(ctx) end

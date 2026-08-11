@@ -8,6 +8,23 @@ local Runtime = require("src.mods.Runtime")
 local Data = require("src.core.Data")
 Data:load()
 
+-- ------------------------------------------------ Gen 2 load gate
+
+do
+  -- the manifest claims gen2, so a Gold boot loads it; a gate skip would be
+  -- a state of "wrong_generation" with zero errors, which is why the state
+  -- is asserted alongside the error count.  A fresh fixture dataset (not the
+  -- shared Data above) so the registries the gen1 load fills below do not
+  -- collide on the second.
+  local fresh = require("tests.modkit.fixtures").fresh()
+  local run2 = T.sdk.loadMod("mods/exp_share", { data = fresh, generation = 2 })
+  T.eq(run2.mod and run2.mod.state, "loaded",
+    "loads on gen 2: " .. tostring(run2.mod and run2.mod.skipReason))
+  T.eq(#run2.errors, 0, "gen 2 load has no boot errors")
+  T.neq(run2.loader.exports.exp_share, nil, "gen 2 exports reachable")
+  run2.release()
+end
+
 local run = T.sdk.loadMod("mods/exp_share", { data = Data })
 T.eq(#run.errors, 0, "loads clean (" .. tostring(run.errors[1]) .. ")")
 local ex = run.loader.exports.exp_share
@@ -810,6 +827,137 @@ do
   T.check(monA.exp + monB.exp > expBefore, "integration: total exp went up")
   T.check(monA.exp > monB.exp,
     "integration: the fighter out-earns the half-share bench mon")
+end
+
+-- ------------------------------------------------ Gen 2 (Gold) support
+
+do
+  -- Gen 2's Battle carries the save itself (battle.save / battle.party, no
+  -- battle.game), announces through battle:emit, and battle.player IS the
+  -- party mon.  The GEN 5+ split must pay the fighter and the bench the same
+  -- way it does on Gen 1.
+  local log = {}
+  local monA, monB = { hp = 10 }, { hp = 10 }
+  local battle = {
+    save = { options = { expShare = "gen5" }, party = { monA, monB } },
+    party = { monA, monB },
+    player = monA,
+    emit = function(_, ev) log[#log + 1] = { kind = "say", text = ev.text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split)
+      log[#log + 1] = { kind = "share", mon = mon, split = split }
+    end,
+  }
+  ex.awardGen5(ctx)
+  T.eq(log[1].mon, monA, "gen2: the fighter keeps the full amount")
+  T.eq(log[1].split, 1, "gen2: fighter split = participants(1)")
+  T.eq(log[2].kind, "say", "gen2: the share line is emitted")
+  T.eq(log[2].text, "EXP is shared\namongst the party!",
+    "gen2: the single shared-exp line")
+  T.eq(log[3].mon, monB, "gen2: the bench mon is paid after the share line")
+  T.eq(log[3].split, 2, "gen2: bench gets half a fighter's share")
+  T.eq(#log, 3, "gen2: fighter share + emit line + one bench share")
+end
+
+do
+  -- Gen 2 BALANCED: battle.player IS the mon, so the cap level comes from
+  -- battle.player.level rather than battle.player.mon.level
+  local log = {}
+  local monA, monB = { hp = 10, level = 12 }, { hp = 10, level = 10 }
+  local battle = {
+    save = { options = { expShare = "balanced" }, party = { monA, monB } },
+    party = { monA, monB },
+    player = monA,
+    emit = function(_, ev) log[#log + 1] = { kind = "say", text = ev.text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split)
+      log[#log + 1] = { kind = "share", mon = mon, split = split }
+    end,
+  }
+  ex.awardBalanced(ctx)
+  T.eq(log[1].mon, monA, "gen2 balanced: the fighter keeps the full amount")
+  T.eq(log[3].mon, monB, "gen2 balanced: the under-leveled bench mon is paid")
+  T.eq(log[3].split, 2, "gen2 balanced: bench gets half a fighter's share")
+  T.eq(#log, 3, "gen2 balanced: fighter share + emit line + one bench share")
+end
+
+do
+  -- Gen 2 AVERAGE: the party average is read from battle.party
+  local log = {}
+  local monA, monB = { hp = 10, level = 12 }, { hp = 10, level = 9 }
+  local battle = {
+    save = { options = { expShare = "average" }, party = { monA, monB } },
+    party = { monA, monB },
+    player = monA,
+    emit = function(_, ev) log[#log + 1] = { kind = "say", text = ev.text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split)
+      log[#log + 1] = { kind = "share", mon = mon, split = split }
+    end,
+  }
+  ex.awardAverage(ctx)
+  T.eq(log[1].mon, monA, "gen2 average: the fighter keeps the full amount")
+  T.eq(log[3].mon, monB, "gen2 average: the below-average bench mon is paid")
+  T.eq(log[3].split, 2, "gen2 average: bench gets half a fighter's share")
+  T.eq(#log, 3, "gen2 average: fighter share + emit line + one bench share")
+end
+
+do
+  -- Gen 2 SINGLE EXP SHARE: the slot is read from battle.save.options
+  local log = {}
+  local monA, monB, monC = { hp = 10 }, { hp = 10 }, { hp = 10 }
+  local battle = {
+    save = { options = { expShare = "gen5", expShareSingle = "3" },
+             party = { monA, monB, monC } },
+    party = { monA, monB, monC },
+    player = monA,
+    emit = function(_, ev) log[#log + 1] = { kind = "say", text = ev.text } end,
+  }
+  local ctx = {
+    battle = battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split)
+      log[#log + 1] = { kind = "share", mon = mon, split = split }
+    end,
+  }
+  ex.awardGen5(ctx)
+  T.eq(log[1].mon, monA, "gen2 single: the fighter keeps the full amount")
+  T.eq(log[3].mon, monC, "gen2 single: only the slot-3 mon is paid")
+  T.eq(#log, 3, "gen2 single: the other bench mon is skipped")
+end
+
+do
+  -- the exp_award hook reads the mode from battle.save.options on Gen 2
+  local sawVanilla = false
+  local calls = {}
+  local monA, monB = { hp = 10 }, { hp = 10 }
+  local gen5Battle = {
+    save = { options = { expShare = "gen5" }, party = { monA, monB } },
+    party = { monA, monB },
+    emit = function() end,
+  }
+  local ctx = {
+    battle = gen5Battle,
+    participants = 1,
+    alive = { monA },
+    applyShare = function(mon, split) calls[#calls + 1] = split end,
+  }
+  Runtime.call("battle.exp_award", function() sawVanilla = true end, ctx)
+  T.eq(sawVanilla, false, "gen2: GEN 5+ replaces the vanilla split")
+  T.eq(#calls, 2, "gen2: the mod's split ran instead")
 end
 
 run.release()

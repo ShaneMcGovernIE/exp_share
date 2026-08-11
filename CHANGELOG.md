@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-08-11
+
+### Added
+
+- Gold (Gen 2) support. The manifest now declares `"games": ["gen1", "gen2"]`,
+  and the exp award reads the save, party and options from Gen 2's Battle
+  shape (`battle.save` / `battle.party`, with `battle.player` being the party
+  mon directly) instead of Gen 1's `battle.game`. The shared-exp line
+  announces through Gen 2's message emit, and the OPTIONS rows persist via
+  `persistOptions` where `writeOptions` is absent. Every split (GEN 1 / GEN 5+
+  / BALANCED / AVERAGE and SINGLE EXP SHARE) behaves the same on Gold as on
+  Red/Blue/Yellow.
+
 ## [0.1.6] - 2026-08-11
 
 ### Fixed

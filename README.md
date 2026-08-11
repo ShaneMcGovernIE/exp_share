@@ -1,6 +1,6 @@
 # Exp Share
 
-Party-wide experience from the OPTIONS menu, in Gen 1 Exp. All style, Gen 5+ Exp. Share style, or BALANCED / AVERAGE presets — with one "EXP is shared amongst the party" line instead of a gain message per Pokemon. A SINGLE EXP SHARE row can scope the shared exp to one party slot instead of the whole bench.
+Party-wide experience from the OPTIONS menu, in Gen 1 Exp. All style, Gen 5+ Exp. Share style, or BALANCED / AVERAGE presets — with one "EXP is shared amongst the party" line instead of a gain message per Pokemon. A SINGLE EXP SHARE row can scope the shared exp to one party slot instead of the whole bench. Works on Red/Blue/Yellow and Gold.
 
 ## How to try it
 
