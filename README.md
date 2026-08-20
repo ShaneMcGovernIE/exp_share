@@ -9,7 +9,8 @@ Party-wide experience from the OPTIONS menu, in Gen 1 Exp. All style, Gen 5+ Exp
 3. Fight. In GEN 1, the fighters split half the exp and the whole party splits the other half (the vanilla Exp. All split, including its division bug). In GEN 5+, the fighters keep the full exp and every alive bench mon gets half a fighter's share.
 4. BALANCED is the GEN 5+ split with a level gate: a bench mon only gains exp while it is below the active fighter's level, so the bench trails the party instead of out-leveling the mons that actually fight. AVERAGE is the same gate measured against the party's average level (whole party, floored) instead of the active fighter. At- or over-threshold bench mons wait for the party to level past them.
 5. The SINGLE EXP SHARE row (right below EXP SHARE) cycles ALL / 1 / 2 / 3 / 4 / 5 / 6. ALL (the default) shares with the whole bench; a slot number shares only with the Pokemon in that party slot — pick a slot past the party's size and nothing is shared at all. The fighters keep their own gain lines in every mode.
-6. Shared recipients get one "EXP is shared amongst the party" line; the fighters still get their own "X gained N EXP. Points!" lines, and everyone's level-ups, stat boxes and move learning still show.
+6. The LEVEL UP JINGLE row toggles between LEVEL UP (default fanfare) and ITEM (regular item pickup chime) to replace the longer level-up fanfare with a quick item pickup sound.
+7. Shared recipients get one "EXP is shared amongst the party" line; the fighters still get their own "X gained N EXP. Points!" lines, and everyone's level-ups, stat boxes and move learning still show.
 
 ## Notes
 

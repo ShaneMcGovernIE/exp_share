@@ -5,8 +5,14 @@ package.path = "./?.lua;./?/init.lua;" .. package.path
 
 local T = require("tests.modkit")
 local Runtime = require("src.mods.Runtime")
-local Data = require("src.core.Data")
-Data:load()
+local Data
+local ok = pcall(function()
+  Data = require("src.core.Data")
+  Data:load()
+end)
+if not ok or not Data or not Data.constants then
+  Data = require("tests.modkit.fixtures").fresh()
+end
 
 -- ------------------------------------------------ Gen 2 load gate
 
@@ -565,6 +571,92 @@ slotGame.save.options.expShareSingle = "bogus"
 T.eq(ex.slotOf(slotGame), nil, "a garbage slot value means ALL")
 T.eq(ex.cycleSlot({}), nil, "no save -> nil (launcher is untouched)")
 T.eq(ex.cycleSlot({ save = {} }), nil, "no options table -> nil")
+
+-- ------------------------------------------------ LEVEL UP JINGLE row & sound redirect
+
+local function findJingleRow(game)
+  local rows = Runtime.call("ui.options.rows", function(_, r) return r end,
+    game, { { id = "text_speed" } })
+  for _, row in ipairs(rows) do
+    if row.id == "exp_share_jingle" then return row end
+  end
+  return nil
+end
+
+local jingleWritten = 0
+local jingleGame = {
+  save = { options = {} },
+  writeOptions = function(self)
+    assert(type(self) == "table" and self.save ~= nil,
+           "writeOptions must be called with a colon")
+    jingleWritten = jingleWritten + 1
+  end,
+}
+
+local jingleRow = findJingleRow(jingleGame)
+T.neq(jingleRow, nil, "the LEVEL UP JINGLE row joins the options menu")
+T.eq(jingleRow.label, "LEVEL UP JINGLE", "jingle row label")
+T.eq(jingleRow.value(jingleGame), "LEVEL UP", "jingle defaults to LEVEL UP")
+T.eq(jingleRow.step(jingleGame, 1), true, "jingle step right")
+T.eq(jingleGame.save.options.expShareJingle, "item", "jingle value becomes item")
+T.eq(jingleRow.value(jingleGame), "ITEM", "jingle label shows ITEM")
+T.eq(jingleRow.step(jingleGame, 1), true, "jingle step right again")
+T.eq(jingleGame.save.options.expShareJingle, "level_up", "jingle wraps to level_up")
+T.eq(jingleRow.value(jingleGame), "LEVEL UP", "jingle label shows LEVEL UP")
+T.eq(jingleRow.step(jingleGame, -1), true, "jingle step left")
+T.eq(jingleGame.save.options.expShareJingle, "item", "jingle left-steps to item")
+T.eq(jingleWritten, 3, "each jingle step persists via writeOptions")
+
+jingleGame.save.options.expShareJingle = "item"
+T.eq(ex.jingleOf(jingleGame), "item", "item mode recognized")
+T.eq(ex.shouldRedirectJingle(jingleGame), true, "shouldRedirectJingle true for item")
+jingleGame.save.options.expShareJingle = "level_up"
+T.eq(ex.jingleOf(jingleGame), "level_up", "level_up mode recognized")
+T.eq(ex.shouldRedirectJingle(jingleGame), false, "shouldRedirectJingle false for level_up")
+jingleGame.save.options.expShareJingle = "bogus"
+T.eq(ex.jingleOf(jingleGame), "level_up", "bogus normalizes to level_up")
+T.eq(ex.cycleJingle({}), nil, "no save -> nil (launcher is untouched)")
+T.eq(ex.cycleJingle({ save = {} }), nil, "no options table -> nil")
+
+do
+  local Sound = require("src.core.Sound")
+  local played = {}
+  local fakeSrc = {
+    play = function(self) self.playing = true end,
+    stop = function(self) self.playing = false end,
+    isPlaying = function(self) return self.playing == true end,
+  }
+  local gen1Data = {
+    audio = {
+      sfx = {
+        Level_Up = { file = "levelup.wav" },
+        Get_Item1 = { file = "item1.wav" },
+      }
+    }
+  }
+  local gen2Data = {
+    audio = {
+      sfx = {
+        Sfx_DexFanfare5079 = { file = "dexfanfare.wav" },
+        Sfx_Item = { file = "item.wav" },
+      }
+    }
+  }
+
+  -- When toggle is set to ITEM: Level_Up -> Get_Item1 (Gen 1) / Sfx_Item (Gen 2)
+  local itemGame = { save = { options = { expShareJingle = "item" } } }
+  ex.cycleJingle(itemGame, 0) -- sets activeOptions / updates lastOptions
+  T.eq(Sound.resolve(gen1Data, "Level_Up"), "Get_Item1", "gen1 Level_Up redirects to Get_Item1")
+  T.eq(Sound.resolve(gen2Data, "Sfx_DexFanfare5079"), "Sfx_Item", "gen2 Sfx_DexFanfare5079 redirects to Sfx_Item")
+  T.eq(Sound.resolve(gen2Data, "Level_Up"), "Sfx_Item", "gen2 Level_Up redirects to Sfx_Item")
+  T.eq(Sound.ducksMusic(gen1Data, "Level_Up"), Sound.ducksMusic(gen1Data, "Get_Item1"), "ducksMusic follows redirected sfx")
+
+  -- When toggle is set to LEVEL UP: default sounds retained
+  local defaultGame = { save = { options = { expShareJingle = "level_up" } } }
+  ex.cycleJingle(defaultGame, 0)
+  T.eq(Sound.resolve(gen1Data, "Level_Up"), "Level_Up", "gen1 Level_Up stays Level_Up when default")
+  T.eq(Sound.resolve(gen2Data, "Sfx_DexFanfare5079"), "Sfx_DexFanfare5079", "gen2 fanfare stays when default")
+end
 
 -- ------------------------------------------------ SINGLE-slot splits
 

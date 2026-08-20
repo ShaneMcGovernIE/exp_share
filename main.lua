@@ -28,8 +28,13 @@ local SLOT_INDEX = {}
 for i, slot in ipairs(SLOT_ORDER) do SLOT_INDEX[slot] = i end
 local SLOT_LABELS = { all = "ALL", ["1"] = "1", ["2"] = "2", ["3"] = "3",
                       ["4"] = "4", ["5"] = "5", ["6"] = "6" }
+local JINGLE_ORDER = { "level_up", "item" }
+local JINGLE_INDEX = { level_up = 1, item = 2, default = 1 }
+local JINGLE_LABELS = { level_up = "LEVEL UP", item = "ITEM", default = "LEVEL UP" }
 
-local api = {}
+local api = {
+  lastOptions = nil,
+}
 
 -- the save behind a battle ctx on either generation: Gen 1's BattleState
 -- carries the live game (battle.game.save); Gen 2's Battle carries the save
@@ -62,6 +67,14 @@ local function slotFromOptions(options)
   local slot = tonumber(options and options.expShareSingle)
   if slot and slot >= 1 and slot <= 6 then return slot end
   return nil
+end
+
+local function jingleFromOptions(options)
+  local jingle = options and options.expShareJingle
+  if jingle == "item" or jingle == true then
+    return "item"
+  end
+  return "level_up"
 end
 
 -- the share line: Gen 1's BattleState:sayNext, Gen 2's Battle:emit
@@ -128,6 +141,48 @@ end
 function api.slotLabel(game)
   local options = game and game.save and game.save.options
   return SLOT_LABELS[options and options.expShareSingle] or "ALL"
+end
+
+local function optionsFrom(target)
+  if type(target) ~= "table" then return nil end
+  if target.save and target.save.options then return target.save.options end
+  if target.options then return target.options end
+  if target.expShareJingle ~= nil or target.expShare ~= nil or target.expShareSingle ~= nil then
+    return target
+  end
+  return nil
+end
+
+-- LEVEL UP JINGLE: "level_up" (default fanfare) vs "item" (short item pickup chime).
+function api.jingleOf(game)
+  local options = optionsFrom(game) or api.lastOptions
+  if not options and package.loaded["src.core.SaveData"] then
+    pcall(function() options = require("src.core.SaveData").loadOptions() end)
+  end
+  return jingleFromOptions(options)
+end
+
+function api.cycleJingle(game, dir)
+  local options = game and game.save and game.save.options
+  if not options then return nil end
+  local i = JINGLE_INDEX[api.jingleOf(game)] or 1
+  local nextJingle = JINGLE_ORDER[((i - 1 + (dir or 1)) % #JINGLE_ORDER) + 1]
+  options.expShareJingle = nextJingle
+  api.lastOptions = options
+  if game.writeOptions then
+    game:writeOptions()
+  elseif game.persistOptions then
+    game:persistOptions()
+  end
+  return nextJingle
+end
+
+function api.jingleLabel(game)
+  return JINGLE_LABELS[api.jingleOf(game)] or "LEVEL UP"
+end
+
+function api.shouldRedirectJingle(gameOrData)
+  return api.jingleOf(gameOrData) == "item"
 end
 
 -- GEN 1 (Exp. All): participants split half the exp; the whole party
@@ -236,8 +291,171 @@ function api.awardAverage(ctx)
 end
 
 return function(mod)
+  local Sound = require("src.core.Sound")
+  if Sound then
+    Sound._expShareApi = api
+    if not Sound._expShareWrapped then
+      Sound._expShareWrapped = true
+      local rawResolve = Sound.resolve
+      Sound.resolve = function(data, name)
+        local curApi = Sound._expShareApi or api
+        if curApi.shouldRedirectJingle(data) then
+          if name == "Level_Up" then
+            local sfx = data and data.audio and data.audio.sfx
+            if sfx and sfx["Get_Item1"] then
+              return "Get_Item1"
+            elseif sfx and sfx["Sfx_Item"] then
+              return "Sfx_Item"
+            end
+            return "Get_Item1"
+          elseif name == "Sfx_DexFanfare5079" then
+            local sfx = data and data.audio and data.audio.sfx
+            if sfx and sfx["Sfx_Item"] then
+              return "Sfx_Item"
+            elseif sfx and sfx["Get_Item1"] then
+              return "Get_Item1"
+            end
+            return "Sfx_Item"
+          end
+        end
+        if rawResolve then
+          return rawResolve(data, name)
+        end
+        return name
+      end
+
+      local rawPlay = Sound.play
+      Sound.play = function(data, name)
+        local curApi = Sound._expShareApi or api
+        if curApi.shouldRedirectJingle(data) then
+          if name == "Level_Up" then
+            local sfx = data and data.audio and data.audio.sfx
+            if sfx and sfx["Get_Item1"] then
+              name = "Get_Item1"
+            elseif sfx and sfx["Sfx_Item"] then
+              name = "Sfx_Item"
+            else
+              name = "Get_Item1"
+            end
+          elseif name == "Sfx_DexFanfare5079" then
+            local sfx = data and data.audio and data.audio.sfx
+            if sfx and sfx["Sfx_Item"] then
+              name = "Sfx_Item"
+            elseif sfx and sfx["Get_Item1"] then
+              name = "Get_Item1"
+            else
+              name = "Sfx_Item"
+            end
+          end
+        end
+        if rawPlay then
+          return rawPlay(data, name)
+        end
+      end
+
+      local rawPlayStereo = Sound.playStereo
+      Sound.playStereo = function(data, name)
+        local curApi = Sound._expShareApi or api
+        if curApi.shouldRedirectJingle(data) then
+          if name == "Level_Up" then
+            local sfx = data and data.audio and data.audio.sfx
+            if sfx and sfx["Get_Item1"] then
+              name = "Get_Item1"
+            elseif sfx and sfx["Sfx_Item"] then
+              name = "Sfx_Item"
+            else
+              name = "Get_Item1"
+            end
+          elseif name == "Sfx_DexFanfare5079" then
+            local sfx = data and data.audio and data.audio.sfx
+            if sfx and sfx["Sfx_Item"] then
+              name = "Sfx_Item"
+            elseif sfx and sfx["Get_Item1"] then
+              name = "Get_Item1"
+            else
+              name = "Sfx_Item"
+            end
+          end
+        end
+        if rawPlayStereo then
+          return rawPlayStereo(data, name)
+        end
+      end
+
+      local rawDucks = Sound.ducksMusic
+      Sound.ducksMusic = function(data, name)
+        local curApi = Sound._expShareApi or api
+        if curApi.shouldRedirectJingle(data) then
+          if name == "Level_Up" then
+            local sfx = data and data.audio and data.audio.sfx
+            if sfx and sfx["Get_Item1"] then
+              name = "Get_Item1"
+            elseif sfx and sfx["Sfx_Item"] then
+              name = "Sfx_Item"
+            else
+              name = "Get_Item1"
+            end
+          elseif name == "Sfx_DexFanfare5079" then
+            local sfx = data and data.audio and data.audio.sfx
+            if sfx and sfx["Sfx_Item"] then
+              name = "Sfx_Item"
+            elseif sfx and sfx["Get_Item1"] then
+              name = "Get_Item1"
+            else
+              name = "Sfx_Item"
+            end
+          end
+        end
+        if rawDucks then
+          return rawDucks(data, name)
+        end
+        return false
+      end
+
+      local rawIsPlaying = Sound.isPlaying
+      Sound.isPlaying = function(name)
+        local curApi = Sound._expShareApi or api
+        if curApi.shouldRedirectJingle() then
+          if name == "Level_Up" then
+            return (rawIsPlaying and (rawIsPlaying("Get_Item1") or rawIsPlaying("Sfx_Item"))) or (rawIsPlaying and rawIsPlaying(name)) or false
+          elseif name == "Sfx_DexFanfare5079" then
+            return (rawIsPlaying and (rawIsPlaying("Sfx_Item") or rawIsPlaying("Get_Item1"))) or (rawIsPlaying and rawIsPlaying(name)) or false
+          end
+        end
+        if rawIsPlaying then
+          return rawIsPlaying(name)
+        end
+        return false
+      end
+
+      local rawStop = Sound.stop
+      Sound.stop = function(name)
+        local curApi = Sound._expShareApi or api
+        if curApi.shouldRedirectJingle() then
+          if name == "Level_Up" then
+            if rawStop then rawStop("Get_Item1") rawStop("Sfx_Item") end
+          elseif name == "Sfx_DexFanfare5079" then
+            if rawStop then rawStop("Sfx_Item") rawStop("Get_Item1") end
+          end
+        end
+        if rawStop then
+          rawStop(name)
+        end
+      end
+    end
+  end
+
+  mod.events:on("game.ready", function(ev)
+    if ev and ev.game and ev.game.save and ev.game.save.options then
+      api.lastOptions = ev.game.save.options
+    end
+  end)
+
   -- the OPTIONS row; next() first keeps every other mod's rows
   mod.hooks:wrap("ui.options.rows", function(next, game, rows)
+    if game and game.save and game.save.options then
+      api.lastOptions = game.save.options
+    end
     local out = next(game, rows)
     if type(out) ~= "table" then return out end
     out[#out + 1] = {
@@ -256,6 +474,14 @@ return function(mod)
         return api.cycleSlot(g, dir) ~= nil
       end,
     }
+    out[#out + 1] = {
+      id = "exp_share_jingle",
+      label = "LEVEL UP JINGLE",
+      value = function(g) return api.jingleLabel(g) end,
+      step = function(g, dir)
+        return api.cycleJingle(g, dir) ~= nil
+      end,
+    }
     return out
   end)
 
@@ -266,7 +492,9 @@ return function(mod)
   -- active; in OFF mode we defer through nextFn, which falls through to
   -- Crystal's wrap so Crystal still owns EXP when exp_share is disabled.
   mod.hooks:wrap("battle.exp_award", function(nextFn, ctx)
-    local mode = modeFromOptions(optionsOf(ctx.battle))
+    local opts = optionsOf(ctx.battle)
+    if opts then api.lastOptions = opts end
+    local mode = modeFromOptions(opts)
     if mode == "gen1" then return api.awardGen1(ctx) end
     if mode == "gen5" then return api.awardGen5(ctx) end
     if mode == "balanced" then return api.awardBalanced(ctx) end
@@ -280,6 +508,10 @@ return function(mod)
   mod.exports.slotOf = api.slotOf
   mod.exports.cycleSlot = api.cycleSlot
   mod.exports.slotLabel = api.slotLabel
+  mod.exports.jingleOf = api.jingleOf
+  mod.exports.cycleJingle = api.cycleJingle
+  mod.exports.jingleLabel = api.jingleLabel
+  mod.exports.shouldRedirectJingle = api.shouldRedirectJingle
   mod.exports.awardGen1 = api.awardGen1
   mod.exports.awardGen5 = api.awardGen5
   mod.exports.awardBalanced = api.awardBalanced

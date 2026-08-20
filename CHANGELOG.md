@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-08-20
+
+### Added
+
+- LEVEL UP JINGLE toggle in the OPTIONS menu: toggle between LEVEL UP (the default level-up fanfare) and ITEM (the regular item pickup chime). When set to ITEM, leveling up in battle or move learning plays the shorter item pickup jingle (`Get_Item1` on Gen 1, `Sfx_Item` on Gen 2) for faster level-up transitions.
+
 ## [0.1.7] - 2026-08-11
 
 ### Added
