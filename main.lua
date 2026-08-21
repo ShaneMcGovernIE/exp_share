@@ -1,5 +1,5 @@
 -- Exp Share: an OPTIONS row that turns party-wide experience on in
--- four flavors.  GEN 1 mirrors the Exp. All key item -- the fighters
+-- five flavors.  GEN 1 mirrors the Exp. All key item -- the fighters
 -- split half of the exp (and stat exp), and the whole party splits the
 -- other half, re-divided by the party count (the participant-division
 -- bug included, engine/battle/experience.asm).  GEN 5+ mirrors the
@@ -12,16 +12,20 @@
 -- Shared recipients get ONE "EXP is shared amongst the party" line
 -- instead of a per-mon "X gained N EXP. Points!" message.
 --
--- A second row, SINGLE EXP SHARE (ALL / 1..6), scopes those shared
--- recipients to one party slot: set to a slot number, the shared exp
+-- CUSTOM keeps the fighters at their full participant share and lets the
+-- bench receive 10%..100% of that amount.  PERCENT SLOT (ALL / 1..6)
+-- selects whether PERCENT edits the global value or one party slot.
+--
+-- SINGLE EXP SHARE (ALL / 1..6) still scopes those shared recipients
+-- to one party slot: set to a slot number, the shared exp
 -- goes only to the mon in that slot instead of the whole bench.  ALL
 -- (the default) keeps the party-wide behaviour above.
 
-local ORDER = { "off", "gen1", "gen5", "balanced", "average" }
+local ORDER = { "off", "gen1", "gen5", "balanced", "average", "custom" }
 local ORDER_INDEX = {}
 for i, mode in ipairs(ORDER) do ORDER_INDEX[mode] = i end
 local LABELS = { off = "OFF", gen1 = "GEN 1", gen5 = "GEN 5+",
-                 balanced = "BALANCED", average = "AVERAGE" }
+                 balanced = "BALANCED", average = "AVERAGE", custom = "CUSTOM" }
 local SHARE_TEXT = "EXP is shared\namongst the party!"
 local SLOT_ORDER = { "all", "1", "2", "3", "4", "5", "6" }
 local SLOT_INDEX = {}
@@ -31,6 +35,9 @@ local SLOT_LABELS = { all = "ALL", ["1"] = "1", ["2"] = "2", ["3"] = "3",
 local JINGLE_ORDER = { "level_up", "item" }
 local JINGLE_INDEX = { level_up = 1, item = 2, default = 1 }
 local JINGLE_LABELS = { level_up = "LEVEL UP", item = "ITEM", default = "LEVEL UP" }
+local PERCENT_ORDER = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 }
+local PERCENT_INDEX = {}
+for i, percent in ipairs(PERCENT_ORDER) do PERCENT_INDEX[percent] = i end
 
 local api = {
   lastOptions = nil,
@@ -57,7 +64,7 @@ end
 local function modeFromOptions(options)
   local mode = options and options.expShare
   if mode == "gen1" or mode == "gen5" or mode == "balanced"
-      or mode == "average" then
+      or mode == "average" or mode == "custom" then
     return mode
   end
   return "off"
@@ -93,7 +100,7 @@ function api.modeOf(game)
 end
 
 -- the row's step body: LEFT/RIGHT cycle OFF -> GEN 1 -> GEN 5+ ->
--- BALANCED -> AVERAGE -> OFF.  Returns nil when there is no save (the
+-- BALANCED -> AVERAGE -> CUSTOM -> OFF.  Returns nil when there is no save (the
 -- launcher's stub games), so the row stays inert there like every other
 -- options row.
 function api.cycle(game, dir)
@@ -141,6 +148,99 @@ end
 function api.slotLabel(game)
   local options = game and game.save and game.save.options
   return SLOT_LABELS[options and options.expShareSingle] or "ALL"
+end
+
+local function writeOptions(game)
+  if game.writeOptions then
+    game:writeOptions()
+  elseif game.persistOptions then
+    game:persistOptions()
+  end
+end
+
+local function normalizePercent(value)
+  local percent = tonumber(value)
+  if percent and PERCENT_INDEX[percent] then return percent end
+  return 100
+end
+
+local function percentSlotFromOptions(options)
+  local slot = options and options.expSharePercentSlot
+  if slot == nil or slot == "all" then return nil end
+  local number = tonumber(slot)
+  if number and number % 1 == 0 and number >= 1 and number <= 6 then
+    return number
+  end
+  return nil
+end
+
+local function percentKey(slot)
+  return "expSharePercent" .. tostring(slot)
+end
+
+local function percentForOptions(options, slot)
+  if type(options) ~= "table" then return 100 end
+  if slot then
+    local override = normalizePercent(options[percentKey(slot)])
+    if options[percentKey(slot)] ~= nil then return override end
+  end
+  return normalizePercent(options.expSharePercent)
+end
+
+-- PERCENT uses the global value when PERCENT SLOT is ALL, or the selected
+-- party-slot override when it names a slot.  Missing/invalid saved values
+-- fall back to the safe 100% default.
+function api.percentSlotOf(game)
+  return percentSlotFromOptions(game and game.save and game.save.options)
+end
+
+function api.percentForSlot(game, slot)
+  local options = game and game.save and game.save.options
+  return percentForOptions(options, tonumber(slot))
+end
+
+function api.percentOf(game)
+  local options = game and game.save and game.save.options
+  return percentForOptions(options, percentSlotFromOptions(options))
+end
+
+function api.percentLabel(game)
+  return tostring(api.percentOf(game)) .. "%"
+end
+
+function api.percentSlotLabel(game)
+  local options = game and game.save and game.save.options
+  local slot = percentSlotFromOptions(options)
+  return slot and tostring(slot) or "ALL"
+end
+
+-- Cycle the global percentage or the selected slot's percentage, depending
+-- on PERCENT SLOT.  Each value is an integer multiple of ten.
+function api.cyclePercent(game, dir)
+  local options = game and game.save and game.save.options
+  if not options then return nil end
+  local current = api.percentOf(game)
+  local i = PERCENT_INDEX[current] or #PERCENT_ORDER
+  local nextPercent = PERCENT_ORDER[((i - 1 + (dir or 1)) % #PERCENT_ORDER) + 1]
+  local slot = percentSlotFromOptions(options)
+  if slot then
+    options[percentKey(slot)] = nextPercent
+  else
+    options.expSharePercent = nextPercent
+  end
+  writeOptions(game)
+  return nextPercent
+end
+
+function api.cyclePercentSlot(game, dir)
+  local options = game and game.save and game.save.options
+  if not options then return nil end
+  local current = tostring(options.expSharePercentSlot or "all")
+  local i = SLOT_INDEX[current] or 1
+  local nextSlot = SLOT_ORDER[((i - 1 + (dir or 1)) % #SLOT_ORDER) + 1]
+  options.expSharePercentSlot = nextSlot
+  writeOptions(game)
+  return nextSlot
 end
 
 local function optionsFrom(target)
@@ -225,10 +325,10 @@ end
 
 -- the shared GEN 5+ split: fighters keep the full exp split between
 -- them; every alive bench mon that passes `gate` gets half a fighter's
--- share.  The bench gains are silent -- one share line replaces the
--- per-mon messages, and it lands after the fighters' own gains but
--- before the bench level-ups.
-local function awardModern(ctx, gate)
+-- share unless `benchSplit` supplies a custom divisor.  The bench gains
+-- are silent -- one share line replaces the per-mon messages, and it lands
+-- after the fighters' own gains but before the bench level-ups.
+local function awardModern(ctx, gate, benchSplit)
   local battle = ctx.battle
   local party = partyOf(battle)
   local slot = slotFromOptions(optionsOf(battle))
@@ -248,7 +348,8 @@ local function awardModern(ctx, gate)
   end
   if #bench > 0 then sayShare(battle, SHARE_TEXT) end
   for _, mon in ipairs(bench) do
-    ctx.applyShare(mon, p * 2, nil)
+    local split = benchSplit and benchSplit(mon, p) or p * 2
+    ctx.applyShare(mon, split, nil)
   end
 end
 
@@ -288,6 +389,77 @@ function api.awardAverage(ctx)
   return awardModern(ctx, function(mon)
     return mon.level < capLevel
   end)
+end
+
+-- CUSTOM: participants receive the full share based on the number of
+-- participants.  Each alive bench mon receives the configured percentage of
+-- that same one-participant share; at 100%, the divisor is identical to the
+-- fighters' divisor.  The engine floors the resulting EXP/stat EXP values in
+-- its normal applyShare path.
+function api.awardCustom(ctx)
+  local battle = ctx.battle
+  local party = partyOf(battle)
+  local options = optionsOf(battle)
+  return awardModern(ctx, nil, function(mon, participants)
+    local slot
+    for i, candidate in ipairs(party) do
+      if candidate == mon then slot = i break end
+    end
+    local percent = percentForOptions(options, slot)
+    return participants * 100 / percent
+  end)
+end
+
+local CUSTOM_ROW_IDS = {
+  exp_share_percent_slot = true,
+  exp_share_percent = true,
+}
+
+local function customOptionRows()
+  return {
+    {
+      id = "exp_share_percent_slot",
+      label = "PERCENT SLOT",
+      value = function(g) return api.percentSlotLabel(g) end,
+      step = function(g, dir)
+        return api.cyclePercentSlot(g, dir) ~= nil
+      end,
+    },
+    {
+      id = "exp_share_percent",
+      label = "PERCENT",
+      value = function(g) return api.percentLabel(g) end,
+      step = function(g, dir)
+        return api.cyclePercent(g, dir) ~= nil
+      end,
+    },
+  }
+end
+
+-- OptionsMenu builds one mutable rows list for the lifetime of the screen.
+-- Keep that list synchronized when the user changes EXP SHARE to/from CUSTOM
+-- instead of waiting for the menu to be reopened.
+local function syncCustomOptionRows(rows, game)
+  local custom = modeFromOptions(game and game.save and game.save.options) == "custom"
+  local seen = {}
+  for i = #rows, 1, -1 do
+    local id = rows[i].id
+    if CUSTOM_ROW_IDS[id] then
+      seen[id] = true
+      if not custom then table.remove(rows, i) end
+    end
+  end
+  if not custom then return end
+  local insertAt = #rows + 1
+  for i, row in ipairs(rows) do
+    if row.id == "exp_share" then insertAt = i + 1 break end
+  end
+  for _, row in ipairs(customOptionRows()) do
+    if not seen[row.id] then
+      table.insert(rows, insertAt, row)
+      insertAt = insertAt + 1
+    end
+  end
 end
 
 return function(mod)
@@ -463,9 +635,12 @@ return function(mod)
       label = "EXP SHARE",
       value = function(g) return api.labelOf(g) end,
       step = function(g, dir)
-        return api.cycle(g, dir) ~= nil
+        local nextMode = api.cycle(g, dir)
+        if nextMode ~= nil then syncCustomOptionRows(out, g) end
+        return nextMode ~= nil
       end,
     }
+    syncCustomOptionRows(out, game)
     out[#out + 1] = {
       id = "exp_share_single",
       label = "SINGLE EXP SHARE",
@@ -486,7 +661,7 @@ return function(mod)
   end)
 
   -- battle.exp_award: OFF defers to the vanilla participant/EXP.ALL
-  -- split; GEN 1, GEN 5+, BALANCED and AVERAGE replace it.  ctx is the
+  -- split; GEN 1, GEN 5+, BALANCED, AVERAGE and CUSTOM replace it.  ctx is the
   -- engine's { battle, participants, alive, applyShare }.  Priority 90 runs
   -- this wrap before Crystal 251's priority-80 wrap so exp_share wins when
   -- active; in OFF mode we defer through nextFn, which falls through to
@@ -499,6 +674,7 @@ return function(mod)
     if mode == "gen5" then return api.awardGen5(ctx) end
     if mode == "balanced" then return api.awardBalanced(ctx) end
     if mode == "average" then return api.awardAverage(ctx) end
+    if mode == "custom" then return api.awardCustom(ctx) end
     return nextFn(ctx)
   end, 90)
 
@@ -508,6 +684,13 @@ return function(mod)
   mod.exports.slotOf = api.slotOf
   mod.exports.cycleSlot = api.cycleSlot
   mod.exports.slotLabel = api.slotLabel
+  mod.exports.percentSlotOf = api.percentSlotOf
+  mod.exports.percentForSlot = api.percentForSlot
+  mod.exports.percentOf = api.percentOf
+  mod.exports.percentLabel = api.percentLabel
+  mod.exports.percentSlotLabel = api.percentSlotLabel
+  mod.exports.cyclePercent = api.cyclePercent
+  mod.exports.cyclePercentSlot = api.cyclePercentSlot
   mod.exports.jingleOf = api.jingleOf
   mod.exports.cycleJingle = api.cycleJingle
   mod.exports.jingleLabel = api.jingleLabel
@@ -516,4 +699,5 @@ return function(mod)
   mod.exports.awardGen5 = api.awardGen5
   mod.exports.awardBalanced = api.awardBalanced
   mod.exports.awardAverage = api.awardAverage
+  mod.exports.awardCustom = api.awardCustom
 end
