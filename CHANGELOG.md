@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] - 2026-08-21
+
+### Fixed
+
+- CUSTOM percentage rows now appear immediately when switching modes in an
+  already-open OPTIONS menu.
+
+## [0.1.9] - 2026-08-21
+
+### Added
+
+- CUSTOM mode while preserving GEN 1, GEN 5+, BALANCED and AVERAGE.
+- PERCENT and PERCENT SLOT rows under CUSTOM, with global or per-party-slot
+  percentages from 10% through 100%.
+- Standalone Lua coverage for CUSTOM mode, conditional rows and per-slot
+  percentage splits.
+
 ## [0.1.8] - 2026-08-20
 
 ### Added
